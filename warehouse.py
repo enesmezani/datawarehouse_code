@@ -24,7 +24,7 @@ def extract_from_source(table_name):
         query = f"SELECT * FROM transportation.{table}"
         source_cursor.execute(query)
         data = source_cursor.fetchall()
-        data_list.extend(data)  # Use extend to add elements of data to data_list
+        data_list.extend(data) 
 
     source_cursor.close()
     source_connection.close()
@@ -44,7 +44,9 @@ def transform_and_load_to_target(data, table_name):
             # elif table_name == 'products':
             #     target_cursor.execute("INSERT INTO datawarehouse.dimproduct (id, category, name, family) VALUES (%s, %s, %s, %s)", (row[0], row[3], row[2],row[1], ))
             if table_name == 'countries':
-                target_cursor.execute("INSERT INTO datawarehouse.dimcountry (id, name, region) VALUES (%s, %s, %s)", (row[0], row[1], row[2],))
+                target_cursor.execute("INSERT INTO datawarehouse.dimcountry (id, name, code) VALUES (%s, %s, %s)", (row[0], row[1], row[2],))
+            elif table_name =='regions':
+                target_cursor.execute("INSERT INTO datawarehouse.dimcountry_subregion (id, subregion, country_id) VALUES (%s, %s, %s)", (row[0], row[1], row[2]))
         target_cursor.execute("COMMIT")
 
     except Exception as e:
