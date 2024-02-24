@@ -1,0 +1,4 @@
+mysql-connector-python
+
+# the command to download everything 
+# pip install -r requirements.txt
