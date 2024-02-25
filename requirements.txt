@@ -1,4 +1,6 @@
 mysql-connector-python
+pandas
+sqlalchemy
 
 # the command to download everything 
 # pip install -r requirements.txt
