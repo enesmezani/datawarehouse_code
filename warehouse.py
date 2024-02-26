@@ -1,8 +1,6 @@
 import logging
 import mysql.connector
-import pandas as pd
 from sqlalchemy import create_engine
-from datetime import datetime
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -207,7 +205,7 @@ def load_to_transportfact(cursor, data):
         existing_record = cursor.fetchone()
 
         if not existing_record:
-            cursor.execute("INSERT INTO datawarehouse.transportfact (product_id, client_id, date, country_id, quantity, price, year) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            cursor.execute("INSERT INTO datawarehouse.transportfact (product_id, client_id, date_id, country_id, quantity, price, year) VALUES (%s, %s, %s, %s, %s, %s, %s)",
                        (row[0], row[1], row[2], row[3], row[4], row[5], row[6]))
         else:
             logger.warning(f"Record with id {row[0]} already exists in transportfact. Skipping insertion.")
