@@ -2,6 +2,7 @@ import logging
 import mysql.connector
 import pandas as pd
 from sqlalchemy import create_engine
+from datetime import datetime
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -43,7 +44,6 @@ def extract_from_source(table_name):
 
     return data_list
 
-
 def transform_and_load_to_target(data, table_name):
     target_connection = mysql.connector.connect(**target_db_config)
     target_cursor = target_connection.cursor()
@@ -59,6 +59,8 @@ def transform_and_load_to_target(data, table_name):
             load_countries_dimension(target_cursor, data)
         elif table_name == 'regions':
             load_regions_dimension(target_cursor, data)
+        elif table == 'purchases':
+            load_date_dimension(target_cursor, data)
 
         load_to_transportfact(target_cursor, data)
 
@@ -135,13 +137,48 @@ def load_regions_dimension(cursor, data):
         else:
             logger.warning(f"Record with id {row[0]} already exists in dimcountry_subregion. Skipping insertion.")
 
+def load_date_dimension(cursor, data):
+    for row in data:
+        purchase_date = row[8]
+        year = purchase_date.year
+        month = purchase_date.month
+        day = purchase_date.day
+
+        cursor.execute("SELECT id FROM datawarehouse.dimdate_year WHERE year = %s", (year,))
+        year_record = cursor.fetchone()
+
+        if not year_record:
+            cursor.execute("INSERT INTO datawarehouse.dimdate_year (year) VALUES (%s)", (year,))
+            cursor.execute("SELECT LAST_INSERT_ID()")
+            year_id = cursor.fetchone()[0]
+        else:
+            year_id = year_record[0]
+
+        cursor.execute("SELECT id FROM datawarehouse.dimdate_month WHERE month = %s", (month,))
+        month_id = cursor.fetchone()
+        print("enes")
+        print(month_id[0])
+
+        cursor.execute("SELECT id FROM datawarehouse.dimdate WHERE day = %s AND month_id = %s AND year_id = %s", (day, month_id[0], year_id))
+        day_record = cursor.fetchone()
+
+        if not day_record:
+            cursor.execute("INSERT INTO datawarehouse.dimdate (day, month_id, year_id, date) VALUES (%s, %s, %s, %s)", (day, month_id[0], year_id, purchase_date))
+
+            quarter = (month - 1) // 3 + 1
+            three_months = ((quarter - 1) * 3) + 1
+
+            cursor.execute("UPDATE datawarehouse.dimdate SET three_months = %s WHERE id = LAST_INSERT_ID()", (three_months,))
+        else:
+            logger.warning(f"Record with date {purchase_date} already exists in dimdate. Skipping insertion.")
+
 def load_to_transportfact(cursor, data):
     # the sql of creating fact table partition by year
-    #  CREATE TABLE `transportfact` (
+    # CREATE TABLE `transportfact` (
     # `id` int(11) NOT NULL AUTO_INCREMENT,
     # `product_id` int(11) DEFAULT NULL,
     # `client_id` int(11) DEFAULT NULL,
-    # `date_id` int(11) DEFAULT NULL,
+    # `date_id` date DEFAULT NULL,
     # `country_id` int(11) DEFAULT NULL,
     # `quantity` int(11) DEFAULT NULL,
     # `price` float DEFAULT NULL,
@@ -151,18 +188,26 @@ def load_to_transportfact(cursor, data):
     # KEY `transportfact_FK_1` (`country_id`),
     # KEY `transportfact_FK_2` (`client_id`),
     # KEY `transportfact_FK_3` (`date_id`)
-    # ) ENGINE=InnoDB AUTO_INCREMENT=577 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+    # ) ENGINE=InnoDB AUTO_INCREMENT=957 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
     # PARTITION BY RANGE (`year`)
     # (PARTITION `p0` VALUES LESS THAN (2010) ENGINE = InnoDB,
     # PARTITION `p1` VALUES LESS THAN (2011) ENGINE = InnoDB,
     # PARTITION `p2` VALUES LESS THAN (2012) ENGINE = InnoDB,
+    # PARTITION `p3` VALUES LESS THAN (2013) ENGINE = InnoDB,
+    # PARTITION `p4` VALUES LESS THAN (2014) ENGINE = InnoDB,
+    # PARTITION `p5` VALUES LESS THAN (2015) ENGINE = InnoDB,
+    # PARTITION `p6` VALUES LESS THAN (2016) ENGINE = InnoDB,
+    # PARTITION `p7` VALUES LESS THAN (2017) ENGINE = InnoDB,
+    # PARTITION `p8` VALUES LESS THAN (2018) ENGINE = InnoDB,
+    # PARTITION `p9` VALUES LESS THAN (2019) ENGINE = InnoDB,
+    # PARTITION `p10` VALUES LESS THAN (2020) ENGINE = InnoDB,
     # PARTITION `pmax` VALUES LESS THAN MAXVALUE ENGINE = InnoDB);
     for row in data:
         cursor.execute("SELECT id FROM datawarehouse.transportfact WHERE id = %s", (row[0],))
         existing_record = cursor.fetchone()
 
         if not existing_record:
-            cursor.execute("INSERT INTO datawarehouse.transportfact (product_id, client_id, date_id, country_id, quantity, price, year) VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            cursor.execute("INSERT INTO datawarehouse.transportfact (product_id, client_id, date, country_id, quantity, price, year) VALUES (%s, %s, %s, %s, %s, %s, %s)",
                        (row[0], row[1], row[2], row[3], row[4], row[5], row[6]))
         else:
             logger.warning(f"Record with id {row[0]} already exists in transportfact. Skipping insertion.")
@@ -235,7 +280,7 @@ def transform_and_load_to_cube():
         target_connection.close()
 
 if __name__ == "__main__":
-    tables = ['companies', 'companies_regions', 'countries', 'products', 'regions', 'regions_products', 'suppliers', 'transfers']
+    tables = ['companies', 'companies_regions', 'countries', 'products', 'regions', 'regions_products', 'purchases', 'suppliers', 'transfers']
 
     for table in tables:
         extracted_data = extract_from_source([table])
