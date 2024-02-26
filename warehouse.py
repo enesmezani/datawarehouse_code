@@ -245,7 +245,6 @@ def transform_and_load_to_cube():
     #         (`ddm`.`year_id` = `ddy`.`id`))
     #     join `datawarehouse`.`dimcountry` `dcoun` on
     #         (`tf`.`country_id` = `dcoun`.`id`));
-
     target_connection = mysql.connector.connect(**target_db_config)
     target_cursor = target_connection.cursor()
 
@@ -254,17 +253,35 @@ def transform_and_load_to_cube():
 
         target_cursor.execute("TRUNCATE TABLE datawarehouse.cube_table")
 
-        companies_data = extract_from_source(['companies'])
-        products_data = extract_from_source(['products'])
-        countries_data = extract_from_source(['countries'])
-        regions_data = extract_from_source(['regions'])
-        transport_fact_data = extract_from_source(['transportfact'])
-
-        load_companies_dimension(target_cursor, companies_data)
-        load_products_dimension(target_cursor, products_data)
-        load_countries_dimension(target_cursor, countries_data)
-        load_regions_dimension(target_cursor, regions_data)
-        load_to_transportfact(target_cursor, transport_fact_data)
+        target_cursor.execute("""
+            INSERT INTO datawarehouse.cube_table (fact_id, product_id, category, product_name, family, client_id, client_name, date_id, day, month_id, month, year, country_id, country_name, quantity, price)
+            SELECT
+                tf.id AS fact_id,
+                tf.product_id,
+                dps.subcategory AS category,
+                dp.family,
+                dp.code AS product_name,
+                tf.client_id,
+                dc.company_name AS client_name,
+                tf.date_id,
+                dd.day,
+                ddm.id AS month_id,
+                ddm.month,
+                ddy.year,
+                tf.country_id,
+                dcoun.name AS country_name,
+                tf.quantity,
+                tf.price
+            FROM
+                datawarehouse.transportfact tf
+            JOIN datawarehouse.dimproduct dp ON tf.product_id = dp.id
+            JOIN datawarehouse.dimproduct_subcategory dps ON dp.category_id = dps.id
+            JOIN datawarehouse.dimclient dc ON tf.client_id = dc.id
+            JOIN datawarehouse.dimdate dd ON tf.date_id = dd.id
+            JOIN datawarehouse.dimdate_month ddm ON dd.month_id = ddm.id
+            JOIN datawarehouse.dimdate_year ddy ON ddm.id = ddy.id
+            JOIN datawarehouse.dimcountry dcoun ON tf.country_id = dcoun.id
+        """)
 
         target_cursor.execute("COMMIT")
         logger.info("Successfully loaded data into cube_table")
