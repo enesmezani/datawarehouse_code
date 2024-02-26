@@ -136,6 +136,27 @@ def load_regions_dimension(cursor, data):
             logger.warning(f"Record with id {row[0]} already exists in dimcountry_subregion. Skipping insertion.")
 
 def load_to_transportfact(cursor, data):
+    # the sql of creating fact table partition by year
+    #  CREATE TABLE `transportfact` (
+    # `id` int(11) NOT NULL AUTO_INCREMENT,
+    # `product_id` int(11) DEFAULT NULL,
+    # `client_id` int(11) DEFAULT NULL,
+    # `date_id` int(11) DEFAULT NULL,
+    # `country_id` int(11) DEFAULT NULL,
+    # `quantity` int(11) DEFAULT NULL,
+    # `price` float DEFAULT NULL,
+    # `year` int(11) NOT NULL,
+    # PRIMARY KEY (`id`,`year`),
+    # KEY `transportfact_FK` (`product_id`),
+    # KEY `transportfact_FK_1` (`country_id`),
+    # KEY `transportfact_FK_2` (`client_id`),
+    # KEY `transportfact_FK_3` (`date_id`)
+    # ) ENGINE=InnoDB AUTO_INCREMENT=577 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+    # PARTITION BY RANGE (`year`)
+    # (PARTITION `p0` VALUES LESS THAN (2010) ENGINE = InnoDB,
+    # PARTITION `p1` VALUES LESS THAN (2011) ENGINE = InnoDB,
+    # PARTITION `p2` VALUES LESS THAN (2012) ENGINE = InnoDB,
+    # PARTITION `pmax` VALUES LESS THAN MAXVALUE ENGINE = InnoDB);
     for row in data:
         cursor.execute("SELECT id FROM datawarehouse.transportfact WHERE id = %s", (row[0],))
         existing_record = cursor.fetchone()
@@ -147,6 +168,41 @@ def load_to_transportfact(cursor, data):
             logger.warning(f"Record with id {row[0]} already exists in transportfact. Skipping insertion.")
 
 def transform_and_load_to_cube():
+    # The sql code of creating the cube
+    # create or replace
+    #     algorithm = UNDEFINED view `datawarehouse`.`cube_view` as
+    #     select
+    #         `tf`.`id` as `fact_id`,
+    #         `tf`.`product_id` as `product_id`,
+    #         `dp`.`category` as `category`,
+    #         `dp`.`name` as `product_name`,
+    #         `dp`.`family` as `family`,
+    #         `tf`.`client_id` as `client_id`,
+    #         `dc`.`company_name` as `client_name`,
+    #         `tf`.`date_id` as `date_id`,
+    #         `dd`.`day` as `day`,
+    #         `dd`.`month_id` as `month_id`,
+    #         `ddm`.`month` as `month`,
+    #         `ddy`.`year` as `year`,
+    #         `tf`.`country_id` as `country_id`,
+    #         `dcoun`.`name` as `country_name`,
+    #         `tf`.`quantity` as `quantity`,
+    #         `tf`.`price` as `price`
+    #     from
+    #         ((((((`datawarehouse`.`transportfact` `tf`
+    #     join `datawarehouse`.`dimproduct` `dp` on
+    #         (`tf`.`product_id` = `dp`.`id`))
+    #     join `datawarehouse`.`dimclient` `dc` on
+    #         (`tf`.`client_id` = `dc`.`id`))
+    #     join `datawarehouse`.`dimdate` `dd` on
+    #         (`tf`.`date_id` = `dd`.`id`))
+    #     join `datawarehouse`.`dimdate_month` `ddm` on
+    #         (`dd`.`month_id` = `ddm`.`id`))
+    #     join `datawarehouse`.`dimdate_year` `ddy` on
+    #         (`ddm`.`year_id` = `ddy`.`id`))
+    #     join `datawarehouse`.`dimcountry` `dcoun` on
+    #         (`tf`.`country_id` = `dcoun`.`id`));
+
     target_connection = mysql.connector.connect(**target_db_config)
     target_cursor = target_connection.cursor()
 
