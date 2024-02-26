@@ -1,6 +1,7 @@
 import logging
 import mysql.connector
 from sqlalchemy import create_engine
+import threading
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -294,11 +295,21 @@ def transform_and_load_to_cube():
         target_cursor.close()
         target_connection.close()
 
+def process_table(table):
+    extracted_data = extract_from_source([table])
+    transform_and_load_to_target(extracted_data, table)
+
 if __name__ == "__main__":
     tables = ['companies', 'companies_regions', 'countries', 'products', 'regions', 'regions_products', 'purchases', 'suppliers', 'transfers']
 
+    threads = []
+
     for table in tables:
-        extracted_data = extract_from_source([table])
-        transform_and_load_to_target(extracted_data, table)
+        thread = threading.Thread(target=process_table, args=(table,))
+        threads.append(thread)
+        thread.start()
+
+    for thread in threads:
+        thread.join()
 
     transform_and_load_to_cube()
