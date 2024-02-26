@@ -1,7 +1,6 @@
 import logging
 import mysql.connector
 from sqlalchemy import create_engine
-import threading
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -155,8 +154,6 @@ def load_date_dimension(cursor, data):
 
         cursor.execute("SELECT id FROM datawarehouse.dimdate_month WHERE month = %s", (month,))
         month_id = cursor.fetchone()
-        print("enes")
-        print(month_id[0])
 
         cursor.execute("SELECT id FROM datawarehouse.dimdate WHERE day = %s AND month_id = %s AND year_id = %s", (day, month_id[0], year_id))
         day_record = cursor.fetchone()
@@ -202,12 +199,13 @@ def load_to_transportfact(cursor, data):
     # PARTITION `p10` VALUES LESS THAN (2020) ENGINE = InnoDB,
     # PARTITION `pmax` VALUES LESS THAN MAXVALUE ENGINE = InnoDB);
     for row in data:
+        print(row[4])
         cursor.execute("SELECT id FROM datawarehouse.transportfact WHERE id = %s", (row[0],))
         existing_record = cursor.fetchone()
 
         if not existing_record:
             cursor.execute("INSERT INTO datawarehouse.transportfact (product_id, client_id, date_id, country_id, quantity, price, year) VALUES (%s, %s, %s, %s, %s, %s, %s)",
-                       (row[0], row[1], row[2], row[3], row[4], row[5], row[6]))
+                       (row[3], row[1], row[7], row[2], None, None, row[-1]))
         else:
             logger.warning(f"Record with id {row[0]} already exists in transportfact. Skipping insertion.")
 
@@ -246,6 +244,7 @@ def transform_and_load_to_cube():
     #         (`ddm`.`year_id` = `ddy`.`id`))
     #     join `datawarehouse`.`dimcountry` `dcoun` on
     #         (`tf`.`country_id` = `dcoun`.`id`));
+
     target_connection = mysql.connector.connect(**target_db_config)
     target_cursor = target_connection.cursor()
 
@@ -284,6 +283,16 @@ def transform_and_load_to_cube():
             JOIN datawarehouse.dimcountry dcoun ON tf.country_id = dcoun.id
         """)
 
+        companies_data = extract_from_source(['companies'])
+        products_data = extract_from_source(['products'])
+        countries_data = extract_from_source(['countries'])
+        regions_data = extract_from_source(['regions'])
+
+        load_companies_dimension(target_cursor, companies_data)
+        load_products_dimension(target_cursor, products_data)
+        load_countries_dimension(target_cursor, countries_data)
+        load_regions_dimension(target_cursor, regions_data)
+
         target_cursor.execute("COMMIT")
         logger.info("Successfully loaded data into cube_table")
 
@@ -295,21 +304,11 @@ def transform_and_load_to_cube():
         target_cursor.close()
         target_connection.close()
 
-def process_table(table):
-    extracted_data = extract_from_source([table])
-    transform_and_load_to_target(extracted_data, table)
-
 if __name__ == "__main__":
     tables = ['companies', 'companies_regions', 'countries', 'products', 'regions', 'regions_products', 'purchases', 'suppliers', 'transfers']
 
-    threads = []
-
     for table in tables:
-        thread = threading.Thread(target=process_table, args=(table,))
-        threads.append(thread)
-        thread.start()
-
-    for thread in threads:
-        thread.join()
+        extracted_data = extract_from_source([table])
+        transform_and_load_to_target(extracted_data, table)
 
     transform_and_load_to_cube()
